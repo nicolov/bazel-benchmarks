@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import json
 import os
 from subprocess import check_call, check_output
 import sys
@@ -18,7 +19,26 @@ GIT_REV_NEW = '60b5ed9'
 
 
 def _print_timings(sw):
-    print(stopwatch.format_report(sw.get_last_aggregated_report()))
+    " Output stopwatch timings in JSON format. """
+    report = sw.get_last_aggregated_report()
+    values = report.aggregated_values
+
+    # fetch all values only for main stopwatch, ignore all the tags
+    log_names = sorted(
+        log_name for log_name in values if "+" not in log_name
+    )
+    if not log_names:
+        return
+
+    data = {}
+
+    for log_name in log_names[1:]:
+        delta_ms, count, bucket = values[log_name]
+        short_name = log_name[log_name.rfind("#") + 1:]
+        data[short_name] = delta_ms
+
+    json_dump = json.dumps(data, indent=2)
+    print(json_dump)
 
 
 def _sh(cmd, *args, **kwargs):
@@ -35,14 +55,15 @@ def _checkout_code(revision):
 
 def _build():
     # target = '//...'  # ~30m
-    # target = '//drake/examples:simple_continuous_time_system'  # ~30s
-    target = '//drake/examples/QPInverseDynamicsForHumanoids/system:valkyrie_controller'  # ~5m
+    target = '//drake/examples:simple_continuous_time_system'  # ~30s
+    # target = '//drake/examples/QPInverseDynamicsForHumanoids/system:valkyrie_controller'  # ~5m
     _sh('bazel build {} --compiler=clang-3.9 --verbose_failures'.format(target),
         cwd=GIT_REPO_PATH)
 
 
 def _clean():
-    _sh('bazel clean --expunge', cwd=GIT_REPO_PATH)
+    if os.path.exists(GIT_REPO_PATH):
+        _sh('bazel clean --expunge', cwd=GIT_REPO_PATH)
 
 
 @click.group()
@@ -55,6 +76,9 @@ def between_commits():
     """ Benchmark builds going back and forth between two
     commits. """
 
+    _clean()
+    _checkout_code(GIT_REV_OLD)
+
     # Count the number of lines in the diff
     num_diff_lines = check_output(
         'git diff {} {} | wc -l'.format(GIT_REV_OLD, GIT_REV_NEW),
@@ -62,8 +86,6 @@ def between_commits():
         cwd=GIT_REPO_PATH).strip()
 
     sw = stopwatch.StopWatch()
-    _clean()
-    _checkout_code(GIT_REV_OLD)
 
     with sw.timer('between_commits'):
         with sw.timer('1_clean_build_old'):
