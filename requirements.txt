@@ -1,0 +1,2 @@
+click==6.7
+dbx-stopwatch==1.5

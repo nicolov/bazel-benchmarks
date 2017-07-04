@@ -1,0 +1,16 @@
+version: "3"
+services:
+  cacher:
+    build:
+      context: .
+      dockerfile: Dockerfile.cacher
+    volumes:
+      - ./cacher_root:/var/www/cache
+    ports:
+      - "7070:7070"
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.builder
+    volumes:
+      - .:/src
