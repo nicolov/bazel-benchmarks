@@ -1,2 +1,4 @@
 *.pyc
 cacher_root
+timings_*.json
+/*.png

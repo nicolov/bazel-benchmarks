@@ -18,7 +18,7 @@ GIT_REV_OLD = '290724e'
 GIT_REV_NEW = '60b5ed9'
 
 
-def _print_timings(sw):
+def _get_timings(sw):
     " Output stopwatch timings in JSON format. """
     report = sw.get_last_aggregated_report()
     values = report.aggregated_values
@@ -37,8 +37,7 @@ def _print_timings(sw):
         short_name = log_name[log_name.rfind("#") + 1:]
         data[short_name] = delta_ms
 
-    json_dump = json.dumps(data, indent=2)
-    print(json_dump)
+    return data
 
 
 def _sh(cmd, *args, **kwargs):
@@ -66,18 +65,33 @@ def _clean():
         _sh('bazel clean --expunge', cwd=GIT_REPO_PATH)
 
 
+def _enable_cache():
+    """ Write .bazelrc to enable remote caching. """
+    bazelrc_path = os.path.join(GIT_REPO_PATH, '.bazelrc')
+
+    with open(bazelrc_path, 'w') as f:
+        f.write("""
+startup --host_jvm_args=-Dbazel.DigestFunction=SHA1
+build --spawn_strategy=remote
+build --remote_rest_cache=http://cacher:7070/cache""")
+
+
 @click.group()
 def cli():
     pass
 
 
 @cli.command()
-def between_commits():
+@click.option('--enable-cache', is_flag=True)
+def between_commits(enable_cache):
     """ Benchmark builds going back and forth between two
     commits. """
 
     _clean()
     _checkout_code(GIT_REV_OLD)
+
+    if enable_cache:
+        _enable_cache()
 
     # Count the number of lines in the diff
     num_diff_lines = check_output(
@@ -105,23 +119,15 @@ def between_commits():
         with sw.timer('5_build_old_again'):
             _build()
 
-    _print_timings(sw)
+    # Save and print results
+    timings_data = _get_timings(sw)
+    output_fname = 'timings_cache_{}.json'.format(enable_cache)
+    with open(output_fname, 'w') as f:
+        json.dump(timings_data, f, indent=2)
+        print(json.dumps(timings_data, indent=2))
+
     print('{} diff lines between commits {} and {}'.format(
         num_diff_lines, GIT_REV_OLD, GIT_REV_NEW))
-
-
-@cli.command()
-def enable_cache():
-    """ Write .bazelrc to enable remote caching. """
-    bazelrc_path = os.path.join(GIT_REPO_PATH, '.bazelrc')
-
-    _checkout_code(GIT_REV_OLD)
-
-    with open(bazelrc_path, 'w') as f:
-        f.write("""
-startup --host_jvm_args=-Dbazel.DigestFunction=SHA1
-build --spawn_strategy=remote
-build --remote_rest_cache=http://cacher:7070/cache""")
 
 
 if __name__ == '__main__':
