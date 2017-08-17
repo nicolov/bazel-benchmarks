@@ -41,7 +41,7 @@ def main(with_cache):
     plt.tight_layout()
 
     output_file_name = 'results_with_cache.png' \
-        if enable_cache \
+        if with_cache \
         else 'results_without_cache.png'
     ax.figure.savefig(output_file_name)
 

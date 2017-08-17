@@ -11,11 +11,12 @@ import click
 import stopwatch
 
 
-GIT_REPO_PATH = '/tmp/build'
-GIT_REPO_URL = 'https://github.com/RobotLocomotion/drake.git'
+GIT_REPO_PATH = os.environ['BENCHMARK_GIT_REPO_PATH']
+GIT_REPO_URL = os.environ['BENCHMARK_GIT_REPO_URL']
 # Two random revisions of the code, ~ 1 week apart
-GIT_REV_OLD = '290724e'
-GIT_REV_NEW = '60b5ed9'
+GIT_REV_OLD = os.environ['BENCHMARK_GIT_REV_OLD']
+GIT_REV_NEW = os.environ['BENCHMARK_GIT_REV_NEW']
+BUILD_TARGET = os.environ['BENCHMARK_BUILD_TARGET']
 
 
 def _get_timings(sw):
@@ -53,10 +54,7 @@ def _checkout_code(revision):
 
 
 def _build():
-    # target = '//...'  # ~30m
-    target = '//drake/examples:simple_continuous_time_system'  # ~30s
-    # target = '//drake/examples/QPInverseDynamicsForHumanoids/system:valkyrie_controller'  # ~5m
-    _sh('bazel build {} --compiler=clang-3.9 --verbose_failures'.format(target),
+    _sh('bazel build {} --verbose_failures'.format(BENCHMARK_BUILD_TARGET),
         cwd=GIT_REPO_PATH)
 
 
@@ -65,20 +63,34 @@ def _clean():
         _sh('bazel clean --expunge', cwd=GIT_REPO_PATH)
 
 
-def _enable_cache():
+def _configure_bazel(enable_cache):
     """ Write .bazelrc to enable remote caching. """
     bazelrc_path = os.path.join(GIT_REPO_PATH, '.bazelrc')
 
-    with open(bazelrc_path, 'w') as f:
-        f.write("""
+    DEFAULT_BAZELRC = """
 startup --host_jvm_args=-Dbazel.DigestFunction=SHA1
+build --compiler=clang-3.9
+"""
+
+    with open(bazelrc_path, 'w') as f:
+        f.write(DEFAULT_BAZELRC)
+
+        if enable_cache:
+            f.write("""
 build --spawn_strategy=remote
-build --remote_rest_cache=http://cacher:7070/cache""")
+build --remote_rest_cache=http://cacher:7070/cache
+""")
 
 
 @click.group()
 def cli():
     pass
+
+
+@cli.command()
+@click.option('--cache/--no-cache')
+def configure_bazel(cache):
+    _configure_bazel(cache)
 
 
 @cli.command()
